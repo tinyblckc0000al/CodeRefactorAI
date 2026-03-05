@@ -10,7 +10,7 @@ export async function aiRewrite(
     language: string,
     analysis: AnalysisResult
 ): Promise<string> {
-    // 获取 API key
+    // Get API key from config
     const config = vscode.workspace.getConfiguration('refactorAI');
     const apiKey = config.get<string>('codexApiKey');
     
@@ -18,10 +18,10 @@ export async function aiRewrite(
         throw new Error('Codex API key not configured. Set refactorAI.codexApiKey in settings.');
     }
     
-    // 构建 prompt
+    // Build prompt
     const prompt = buildRewritePrompt(code, language, analysis);
     
-    // 调用 Codex CLI
+    // Call Codex CLI
     try {
         const { stdout } = await execAsync(
             `codex -q "${prompt.replace(/"/g, '\\"')}"`,
@@ -75,7 +75,7 @@ export async function callGemini(code: string, prompt: string): Promise<string> 
         throw new Error('Gemini API key not configured');
     }
     
-    // Gemini API 调用
+    // Gemini API call
     const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
         method: 'POST',
         headers: {
@@ -87,6 +87,6 @@ export async function callGemini(code: string, prompt: string): Promise<string> 
         })
     });
     
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    const data = await response.json() as any;
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }

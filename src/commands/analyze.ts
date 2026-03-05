@@ -30,16 +30,16 @@ export interface DependencyNode {
 }
 
 export async function analyzeCode(code: string, language: string): Promise<AnalysisResult> {
-    // 1. Smell 检测
-    const smells = detectSmells    
-    // (code, language);
-2. 复杂度计算
+    // 1. Smell detection
+    const smells = detectSmells(code, language);
+    
+    // 2. Complexity calculation
     const complexity = calculateComplexity(code, language);
     
-    // 3. 约束提取
+    // 3. Constraint extraction
     const constraints = extractConstraints(code, language);
     
-    // 4. 依赖图构建
+    // 4. Dependency graph building
     const dependencies = buildDependencyGraph(code, language);
     
     return {

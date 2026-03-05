@@ -13,7 +13,7 @@ export function extractConstraints(code: string, language: string): Constraint[]
         });
     }
     
-   / // 2. 显式约束：API 签名
+    // 2. 显式约束：API 签名
     const functionPattern = /function\s+(\w+)\s*\(([^)]*)\)/g;
     while ((match = functionPattern.exec(code)) !== null) {
         constraints.push({

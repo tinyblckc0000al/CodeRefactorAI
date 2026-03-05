@@ -4,7 +4,7 @@ import { rewriteCode } from './commands/rewrite';
 import { visualizeGraph } from './commands/visualize';
 
 export function activate(context: vscode.ExtensionContext) {
-    // 注册命令
+    // Register analyze command
     const analyzeCmd = vscode.commands.registerCommand('refactor.analyze', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -15,10 +15,10 @@ export function activate(context: vscode.ExtensionContext) {
         const code = editor.document.getText();
         const result = await analyzeCode(code, editor.document.languageId);
         
-        // 显示结果
+        // Show result
         vscode.window.showInformationMessage(`Analyzed: ${result.smells.length} smells found`);
         
-到 Web        // 输出View
+        // Show in WebView
         const panel = vscode.window.createWebviewPanel(
             'refactorView',
             'CodeRefactor AI',
@@ -29,6 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
         panel.webview.html = generateHtml(result);
     });
     
+    // Register rewrite command
     const rewriteCmd = vscode.commands.registerCommand('refactor.rewrite', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -39,7 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
         const code = editor.document.getText();
         const result = await rewriteCode(code, editor.document.languageId);
         
-        // 显示重构建议
+        // Show refactoring suggestion
         const selection = await vscode.window.showInformationMessage(
             'AI Rewritten code available',
             'Preview',
@@ -57,6 +58,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
     
+    // Register visualize command
     const visualizeCmd = vscode.commands.registerCommand('refactor.visualize', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -67,7 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
         const code = editor.document.getText();
         const graph = await visualizeGraph(code, editor.document.languageId);
         
-        // 在新窗口显示图
+        // Show graph in new window
         const panel = vscode.window.createWebviewPanel(
             'dependencyGraph',
             'Dependency Graph',
@@ -120,7 +122,6 @@ function generateGraphHtml(graph: any): string {
     <div id="graph"></div>
     <script>
         const data = ${JSON.stringify(graph)};
-        // D3.js force graph here
     </script>
 </body>
 </html>`;
