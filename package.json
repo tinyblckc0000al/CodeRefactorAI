@@ -1,0 +1,68 @@
+{
+  "name": "coderefactor-ai",
+  "displayName": "CodeRefactor AI",
+  "description": "AI-powered code refactoring with constraint-based rewriting and functional equivalence verification",
+  "version": "0.1.0",
+  "publisher": "coderefactor-ai",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:refactor.analyze",
+    "onCommand:refactor.rewrite",
+    "onCommand:refactor.visualize"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "refactor.analyze",
+        "title": "Refactor: Analyze Code"
+      },
+      {
+        "command": "refactor.rewrite",
+        "title": "Refactor: AI Rewrite"
+      },
+      {
+        "command": "refactor.visualize",
+        "title": "Refactor: Show Dependency Graph"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "CodeRefactor AI",
+      "properties": {
+        "refactorAI.codexApiKey": {
+          "type": "string",
+          "description": "OpenAI Codex API Key"
+        },
+        "refactorAI.geminiApiKey": {
+          "type": "string",
+          "description": "Google Gemini API Key"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.20.0",
+    "tree-sitter-javascript": "^0.19.0",
+    "tree-sitter-typescript": "^0.20.0",
+    "d3": "^7.8.0"
+  }
+}
