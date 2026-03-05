@@ -85,3 +85,85 @@ export function detectSmells(code: string, language: string): Smell[] {
     
     return smells;
 }
+
+// 扩展 Smell 检测
+export function detectMoreSmells(code: string, language: string): Smell[] {
+    const smells: Smell[] = [];
+    
+    // 6. 检测重复代码 (简单近似)
+    const lines = code.split('\n');
+    for (let i = 0; i < lines.length - 3; i++) {
+        const block = lines.slice(i, i + 4).join('\n').trim();
+        if (block.length > 50) {
+            for (let j = i + 1; j < lines.length - 3; j++) {
+                const compareBlock = lines.slice(j, j + 4).join('\n').trim();
+                if (block === compareBlock && block.length > 100) {
+                    smells.push({
+                        type: 'duplicate-code',
+                        message: `Duplicate code block found (lines ${i + 1} and ${j + 1})`,
+                        line: i + 1,
+                        severity: 'medium'
+                    });
+                    break;
+                }
+            }
+        }
+    }
+    
+    // 7. 检测 Feature Envy (过度访问其他对象)
+    const thisPattern = /this\.(\w+)/g;
+    const thisRefs: string[] = [];
+    while ((match = thisPattern.exec(code)) !== null) {
+        thisRefs.push(match[1]);
+    }
+    
+    if (thisRefs.length > 10) {
+        smells.push({
+            type: 'feature-envy',
+            message: `Method accesses ${thisRefs.length} fields of 'this' - possible Feature Envy`,
+            line: 1,
+            severity: 'medium'
+        });
+    }
+    
+    // 8. 检测 God Class 倾向 (大量方法)
+    const methodPattern = /(?:function\s+(\w+)|(\w+)\s*\([^)]*\)\s*\{)/g;
+    const methods: string[] = [];
+    while ((match = methodPattern.exec(code)) !== null) {
+        methods.push(match[1] || match[2]);
+    }
+    
+    if (methods.length > 20) {
+        smells.push({
+            type: 'god-class',
+            message: `Class has ${methods.length} methods - consider splitting`,
+            line: 1,
+            severity: 'high'
+        });
+    }
+    
+    // 9. 检测 Promise 嵌套 (回调地狱)
+    const promiseNest = code.match(/\.then\([^)]*\)\s*\.then/g);
+    if (promiseNest && promiseNest.length > 2) {
+        smells.push({
+            type: 'promise-hell',
+            message: `${promiseNest.length} nested .then() - consider async/await`,
+            line: 1,
+            severity: 'medium'
+        });
+    }
+    
+    // 10. 检测不安全的 any 类型
+    const unsafeAny = /:\s*any\b/g;
+    let anyMatch;
+    while ((anyMatch = unsafeAny.exec(code)) !== null) {
+        smells.push({
+            type: 'unsafe-any',
+            message: 'Use of `any` type reduces type safety',
+            line: code.substring(0, anyMatch.index).split('\n').length,
+            severity: 'low'
+        });
+    }
+    
+    return smells;
+}
