@@ -69,3 +69,37 @@ AI-powered code refactoring tool with constraint-based rewriting and functional 
 ## License
 
 MIT
+
+---
+
+## 本地开发
+
+```bash
+# 安装依赖
+npm install
+
+# 编译
+npm run compile
+
+# 开发模式
+npm run watch
+```
+
+## 推送指南
+
+由于环境中没有 gh CLI，需要手动推送：
+
+```bash
+# 1. 在 GitHub 创建仓库
+# 2. 添加 remote
+git remote add origin https://github.com/YOUR_USERNAME/CodeRefactorAI.git
+
+# 3. 推送
+git push -u origin master
+```
+
+## 当前进度
+
+- ✅ Day 1: 基础设施 + 核心模块
+- ⏳ Day 2: 核心功能 (Smell检测, AI重写)
+- ⏳ Day 3: 验证 + 发布
