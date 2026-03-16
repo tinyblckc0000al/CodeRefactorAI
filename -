@@ -1,0 +1,4 @@
+result = 1 + 2
+
+x = result
+y = x * 3

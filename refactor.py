@@ -6,7 +6,7 @@ import ast
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 class PythonAnalyzer(ast.NodeVisitor):
@@ -81,8 +81,56 @@ class CodeRefactorer:
         self.source_code = source_code
         self.tree = ast.parse(source_code)
     
+    def _find_name_locations(self, name: str) -> dict:
+        """查找名称在代码中的所有位置"""
+        locations = {'definitions': [], 'references': []}
+        
+        class NameFinder(ast.NodeVisitor):
+            def __init__(self, target_name):
+                self.target_name = target_name
+            
+            def visit_FunctionDef(self, node):
+                if node.name == self.target_name:
+                    locations['definitions'].append({
+                        'type': 'function',
+                        'line': node.lineno,
+                        'name': node.name
+                    })
+                self.generic_visit(node)
+            
+            def visit_AsyncFunctionDef(self, node):
+                self.visit_FunctionDef(node)
+            
+            def visit_ClassDef(self, node):
+                if node.name == self.target_name:
+                    locations['definitions'].append({
+                        'type': 'class',
+                        'line': node.lineno,
+                        'name': node.name
+                    })
+                self.generic_visit(node)
+            
+            def visit_Name(self, node):
+                if node.id == self.target_name:
+                    locations['references'].append({
+                        'type': 'name',
+                        'line': node.lineno,
+                        'ctx': type(node.ctx).__name__
+                    })
+                self.generic_visit(node)
+        
+        finder = NameFinder(name)
+        finder.visit(self.tree)
+        return locations
+    
     def rename(self, old_name: str, new_name: str) -> str:
         """重命名函数或变量"""
+        
+        # 验证旧名称是否存在
+        locations = self._find_name_locations(old_name)
+        if not locations['definitions'] and not locations['references']:
+            raise ValueError(f"名称 '{old_name}' 在代码中未找到")
+        
         class RenameVisitor(ast.NodeTransformer):
             def __init__(self, old_name, new_name):
                 self.old_name = old_name
@@ -110,46 +158,154 @@ class CodeRefactorer:
                     node.name = self.new_name
                 self.generic_visit(node)
                 return node
+            
+            def visit_Attribute(self, node):
+                # 处理 self.old_name 这样的属性访问
+                if isinstance(node.value, ast.Name):
+                    if node.value.id == self.old_name:
+                        node.value.id = self.new_name
+                self.generic_visit(node)
+                return node
         
         transformer = RenameVisitor(old_name, new_name)
         new_tree = transformer.visit(self.tree)
         ast.fix_missing_locations(new_tree)
         return ast.unparse(new_tree)
     
-    def extract_variable(self, var_name: str, target_expr: str) -> str:
-        """提取变量 - 将指定表达式提取为变量
+    def extract_variable(self, var_name: str, target_line: int) -> str:
+        """提取变量 - 将指定行的表达式提取为变量
         
-        简化版：查找第一个匹配的表达式的赋值语句，将其提取到函数开头
+        Args:
+            var_name: 新变量名
+            target_line: 要提取的行号 (1-indexed)
         """
         lines = self.source_code.split('\n')
-        new_lines = []
         
+        if target_line < 1 or target_line > len(lines):
+            raise ValueError(f"行号 {target_line} 超出范围 (1-{len(lines)})")
+        
+        target_content = lines[target_line - 1]
+        
+        # 解析该行代码
+        try:
+            # 尝试解析整行
+            target_ast = ast.parse(target_content, mode='eval')
+        except SyntaxError:
+            # 如果失败，尝试作为表达式语句解析
+            try:
+                target_ast = ast.parse(target_content, mode='exec')
+            except SyntaxError as e:
+                raise ValueError(f"无法解析第 {target_line} 行: {e}")
+        
+        # 查找该行的赋值语句
+        class AssignFinder(ast.NodeVisitor):
+            def __init__(self, line_no):
+                self.line_no = line_no
+                self.assignments = []
+            
+            def visit_Assign(self, node):
+                if node.lineno == self.line_no:
+                    # 获取等号左侧的变量名
+                    if node.targets and isinstance(node.targets[0], ast.Name):
+                        var = node.targets[0].id
+                        value = ast.unparse(node.value)
+                        self.assignments.append({
+                            'var': var,
+                            'value': value,
+                            'node': node
+                        })
+                self.generic_visit(node)
+            
+            def visit_AnnAssign(self, node):
+                if node.lineno == self.line_no:
+                    if isinstance(node.target, ast.Name):
+                        var = node.target.id
+                        value = ast.unparse(node.value) if node.value else None
+                        self.assignments.append({
+                            'var': var,
+                            'value': value,
+                            'node': node,
+                            'annotated': True,
+                            'annotation': ast.unparse(node.annotation) if node.annotation else None
+                        })
+                self.generic_visit(node)
+        
+        finder = AssignFinder(target_line)
+        finder.visit(self.tree)
+        
+        if not finder.assignments:
+            raise ValueError(f"第 {target_line} 行不是有效的赋值语句")
+        
+        assignment = finder.assignments[0]
+        original_var = assignment['var']
+        value_expr = assignment['value']
+        
+        # 构建新代码
+        # 1. 在函数开头或模块顶部添加新变量
+        # 2. 将原赋值改为对新变量的引用
+        
+        # 找到合适的位置插入新变量（在第一个函数定义之前或文件开头）
+        insert_pos = 0
         for i, line in enumerate(lines):
-            if target_expr in line and '=' in line:
-                # 找到目标表达式
-                indent = len(line) - len(line.lstrip())
-                prefix = line[:line.index(target_expr)].strip()
-                
-                # 提取赋值语句
-                if '=' in line:
-                    # 找到等号位置
-                    eq_pos = line.index('=')
-                    value = line[eq_pos + 1:].strip()
-                    indent_str = ' ' * indent
-                    new_lines.append(f"{indent_str}{var_name} = {value}")
-                    new_lines.append(f"{indent_str}{target_expr} = {var_name}")
-                else:
-                    new_lines.append(line)
-            else:
-                new_lines.append(line)
+            stripped = line.strip()
+            if stripped.startswith('def ') or stripped.startswith('async def ') or \
+               stripped.startswith('class ') or stripped.startswith('@'):
+                insert_pos = i
+                break
+        
+        # 获取目标行的缩进
+        target_indent = len(target_content) - len(target_content.lstrip())
+        indent_str = ' ' * target_indent
+        
+        # 创建新变量行
+        if assignment.get('annotated'):
+            new_var_line = f"{indent_str}{var_name}: {assignment['annotation']} = {value_expr}"
+        else:
+            new_var_line = f"{indent_str}{var_name} = {value_expr}"
+        
+        # 修改原行为对新变量的引用
+        new_target_line = f"{indent_str}{original_var} = {var_name}"
+        
+        # 重建代码
+        new_lines = lines[:insert_pos]
+        if insert_pos > 0 and new_lines and new_lines[-1].strip():
+            new_lines.append('')  # 空行分隔
+        new_lines.append(new_var_line)
+        new_lines.append('')  # 空行分隔
+        new_lines.extend(lines[insert_pos:target_line - 1])
+        new_lines.append(new_target_line)
+        new_lines.extend(lines[target_line:])
         
         return '\n'.join(new_lines)
 
 
 def analyze_file(filepath: str) -> dict:
     """分析 Python 文件"""
-    with open(filepath, 'r', encoding='utf-8') as f:
-        source = f.read()
+    path = Path(filepath)
+    
+    if not path.exists():
+        return {
+            'file': filepath,
+            'success': False,
+            'error': f"文件不存在: {filepath}"
+        }
+    
+    if not path.is_file():
+        return {
+            'file': filepath,
+            'success': False,
+            'error': f"不是文件: {filepath}"
+        }
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            source = f.read()
+    except Exception as e:
+        return {
+            'file': filepath,
+            'success': False,
+            'error': f"读取文件失败: {e}"
+        }
     
     try:
         tree = ast.parse(source)
@@ -157,7 +313,7 @@ def analyze_file(filepath: str) -> dict:
         analyzer.visit(tree)
         
         return {
-            'file': filepath,
+            'file': str(path.absolute()),
             'success': True,
             'structure': {
                 'imports': analyzer.imports,
@@ -170,7 +326,7 @@ def analyze_file(filepath: str) -> dict:
         return {
             'file': filepath,
             'success': False,
-            'error': str(e)
+            'error': f"语法错误: {e}"
         }
 
 
@@ -184,7 +340,7 @@ def main():
   python refactor.py analyze sample.py --json
   python refactor.py rename sample.py calculate compute
   python refactor.py rename sample.py calculate compute -o newfile.py
-  python refactor.py extract sample.py new_var "item * 2"
+  python refactor.py extract sample.py new_var 10
         '''
     )
     subparsers = parser.add_subparsers(dest='command', help='子命令')
@@ -205,10 +361,14 @@ def main():
     extract_parser = subparsers.add_parser('extract', help='提取变量')
     extract_parser.add_argument('file', help='Python 文件路径')
     extract_parser.add_argument('var_name', help='新变量名')
-    extract_parser.add_argument('expression', help='要提取的表达式')
+    extract_parser.add_argument('line', type=int, help='要提取的行号')
     extract_parser.add_argument('-o', '--output', help='输出文件路径')
     
     args = parser.parse_args()
+    
+    if args.command is None:
+        parser.print_help()
+        sys.exit(1)
     
     if args.command == 'analyze':
         result = analyze_file(args.file)
@@ -246,44 +406,84 @@ def main():
                         print(f"   {var['name']} = {var['value']}")
                     if len(s['variables']) > 5:
                         print(f"   ... 还有 {len(s['variables']) - 5} 个")
+                
+                if not any([s['imports'], s['classes'], s['functions'], s['variables']]):
+                    print("   (未检测到结构)")
             else:
-                print(f"❌ 解析错误: {result['error']}", file=sys.stderr)
+                print(f"❌ {result['error']}", file=sys.stderr)
                 sys.exit(1)
     
     elif args.command == 'rename':
-        with open(args.file, 'r', encoding='utf-8') as f:
-            source = f.read()
+        path = Path(args.file)
+        if not path.exists():
+            print(f"❌ 文件不存在: {args.file}", file=sys.stderr)
+            sys.exit(1)
+        
+        try:
+            with open(args.file, 'r', encoding='utf-8') as f:
+                source = f.read()
+        except Exception as e:
+            print(f"❌ 读取文件失败: {e}", file=sys.stderr)
+            sys.exit(1)
         
         refactorer = CodeRefactorer(source)
         try:
             new_source = refactorer.rename(args.old_name, args.new_name)
             output = args.output or args.file
+            
+            # 如果覆盖原文件，先备份
+            if output == args.file:
+                backup_path = f"{args.file}.bak"
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    f.write(source)
+                print(f"📦 已备份原文件到: {backup_path}")
+            
             with open(output, 'w', encoding='utf-8') as f:
                 f.write(new_source)
             print(f"✅ 已重命名 '{args.old_name}' -> '{args.new_name}'")
             print(f"📁 已保存到: {output}")
+        except ValueError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            sys.exit(1)
         except Exception as e:
             print(f"❌ 重命名失败: {e}", file=sys.stderr)
             sys.exit(1)
     
     elif args.command == 'extract':
-        with open(args.file, 'r', encoding='utf-8') as f:
-            source = f.read()
+        path = Path(args.file)
+        if not path.exists():
+            print(f"❌ 文件不存在: {args.file}", file=sys.stderr)
+            sys.exit(1)
+        
+        try:
+            with open(args.file, 'r', encoding='utf-8') as f:
+                source = f.read()
+        except Exception as e:
+            print(f"❌ 读取文件失败: {e}", file=sys.stderr)
+            sys.exit(1)
         
         refactorer = CodeRefactorer(source)
         try:
-            new_source = refactorer.extract_variable(args.var_name, args.expression)
+            new_source = refactorer.extract_variable(args.var_name, args.line)
             output = args.output or args.file
+            
+            # 如果覆盖原文件，先备份
+            if output == args.file:
+                backup_path = f"{args.file}.bak"
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    f.write(source)
+                print(f"📦 已备份原文件到: {backup_path}")
+            
             with open(output, 'w', encoding='utf-8') as f:
                 f.write(new_source)
-            print(f"✅ 已提取变量 '{args.var_name}'")
+            print(f"✅ 已提取变量 '{args.var_name}' (第 {args.line} 行)")
             print(f"📁 已保存到: {output}")
+        except ValueError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            sys.exit(1)
         except Exception as e:
             print(f"❌ 提取变量失败: {e}", file=sys.stderr)
             sys.exit(1)
-    
-    else:
-        parser.print_help()
 
 
 if __name__ == '__main__':
