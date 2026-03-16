@@ -184,78 +184,88 @@ class CodeRefactorer:
         if target_line < 1 or target_line > len(lines):
             raise ValueError(f"行号 {target_line} 超出范围 (1-{len(lines)})")
         
-        target_content = lines[target_line - 1]
-        
-        # 解析该行代码
-        try:
-            # 尝试解析整行
-            target_ast = ast.parse(target_content, mode='eval')
-        except SyntaxError:
-            # 如果失败，尝试作为表达式语句解析
-            try:
-                target_ast = ast.parse(target_content, mode='exec')
-            except SyntaxError as e:
-                raise ValueError(f"无法解析第 {target_line} 行: {e}")
-        
-        # 查找该行的赋值语句
+        # 直接从 AST 查找该行的赋值语句，不依赖文本解析
         class AssignFinder(ast.NodeVisitor):
             def __init__(self, line_no):
                 self.line_no = line_no
-                self.assignments = []
+                self.assignment = None
             
             def visit_Assign(self, node):
                 if node.lineno == self.line_no:
-                    # 获取等号左侧的变量名
                     if node.targets and isinstance(node.targets[0], ast.Name):
-                        var = node.targets[0].id
-                        value = ast.unparse(node.value)
-                        self.assignments.append({
-                            'var': var,
-                            'value': value,
+                        self.assignment = {
+                            'type': 'Assign',
+                            'var': node.targets[0].id,
+                            'value': ast.unparse(node.value),
                             'node': node
-                        })
+                        }
                 self.generic_visit(node)
             
             def visit_AnnAssign(self, node):
                 if node.lineno == self.line_no:
                     if isinstance(node.target, ast.Name):
-                        var = node.target.id
-                        value = ast.unparse(node.value) if node.value else None
-                        self.assignments.append({
-                            'var': var,
-                            'value': value,
+                        self.assignment = {
+                            'type': 'AnnAssign',
+                            'var': node.target.id,
+                            'value': ast.unparse(node.value) if node.value else None,
                             'node': node,
                             'annotated': True,
                             'annotation': ast.unparse(node.annotation) if node.annotation else None
-                        })
+                        }
                 self.generic_visit(node)
         
         finder = AssignFinder(target_line)
         finder.visit(self.tree)
         
-        if not finder.assignments:
+        if not finder.assignment:
             raise ValueError(f"第 {target_line} 行不是有效的赋值语句")
         
-        assignment = finder.assignments[0]
+        assignment = finder.assignment
         original_var = assignment['var']
         value_expr = assignment['value']
         
-        # 构建新代码
-        # 1. 在函数开头或模块顶部添加新变量
-        # 2. 将原赋值改为对新变量的引用
-        
-        # 找到合适的位置插入新变量（在第一个函数定义之前或文件开头）
-        insert_pos = 0
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith('def ') or stripped.startswith('async def ') or \
-               stripped.startswith('class ') or stripped.startswith('@'):
-                insert_pos = i
-                break
-        
         # 获取目标行的缩进
+        target_content = lines[target_line - 1]
         target_indent = len(target_content) - len(target_content.lstrip())
         indent_str = ' ' * target_indent
+        
+        # 找到目标语句所在的函数/类定义位置
+        class DefFinder(ast.NodeVisitor):
+            def __init__(self, target_line):
+                self.target_line = target_line
+                self.containing_def = None
+            
+            def visit_FunctionDef(self, node):
+                if node.lineno <= self.target_line:
+                    self.containing_def = ('function', node.lineno, node.name)
+                self.generic_visit(node)
+            
+            def visit_AsyncFunctionDef(self, node):
+                if node.lineno <= self.target_line:
+                    self.containing_def = ('function', node.lineno, node.name)
+                self.generic_visit(node)
+            
+            def visit_ClassDef(self, node):
+                if node.lineno <= self.target_line:
+                    self.containing_def = ('class', node.lineno, node.name)
+                self.generic_visit(node)
+        
+        def_finder = DefFinder(target_line)
+        def_finder.visit(self.tree)
+        
+        # 确定插入位置
+        if def_finder.containing_def:
+            # 插入到包含该语句的函数/类的定义之后
+            insert_pos = def_finder.containing_def[1]
+        else:
+            # 如果不在任何函数/类中，插入到文件开头
+            insert_pos = 0
+        
+        # 找到插入点后第一个有实际内容的位置
+        for i in range(insert_pos, len(lines)):
+            if lines[i].strip():
+                insert_pos = i + 1
+                break
         
         # 创建新变量行
         if assignment.get('annotated'):
@@ -269,9 +279,9 @@ class CodeRefactorer:
         # 重建代码
         new_lines = lines[:insert_pos]
         if insert_pos > 0 and new_lines and new_lines[-1].strip():
-            new_lines.append('')  # 空行分隔
+            new_lines.append('')
         new_lines.append(new_var_line)
-        new_lines.append('')  # 空行分隔
+        new_lines.append('')
         new_lines.extend(lines[insert_pos:target_line - 1])
         new_lines.append(new_target_line)
         new_lines.extend(lines[target_line:])
