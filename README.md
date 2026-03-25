@@ -1,105 +1,90 @@
-# CodeRefactor AI
+# CodeRefactorAI
 
-AI-powered code refactoring tool with constraint-based rewriting and functional equivalence verification.
+> An AI-powered code refactoring engine built for the era of AI-generated code.
 
-## 核心能力
+## Problem
 
-- **代码解析**: AST 解析 + 依赖分析
-- **约束提取**: 显式约束 + AI 隐式约束理解
-- **Smell 检测**: 死代码/冗余封装/不可达条件
-- **AI 重写**: Codex/Gemini 驱动
-- **功能等价验证**: 差分测试
-- **可视化**: 依赖图 + 数据流
+Large Language Models (LLMs) are now capable of writing substantial amounts of code. However, AI-generated code comes with unique challenges that traditional tooling doesn't address:
 
-## 差异化
+1. **Implicit Dependencies** — LLMs often generate code using libraries or functions without clear import statements, making dependency graphs unreliable.
 
-1. 约束提取 (业界无)
-2. 功能等价验证 (业界无)
-3. Self-Evolving (集成 EvoMap)
-4. 复杂度分级处理
+2. **Hidden Side Effects** — Code modifications may unintentionally affect other functionalities, especially in projects with complex state management.
 
-## 技术栈
+3. **Equivalence Verification** — When refactoring AI-generated code, how do we verify that the new code behaves identically to the original?
 
-- TypeScript (VSCode Extension)
-- Tree-sitter (代码解析)
-- Emerge (依赖图)
-- RefakTS (精确重构 CLI)
-- Codex/Gemini (AI)
-- D3.js (可视化)
+## Solution
 
-## 架构
+CodeRefactorAI is an AI refactoring engine designed specifically for AI-generated code. Our approach combines three core technologies:
 
+- **Dependency Analysis** — Deep static analysis to accurately map code dependencies beyond surface-level imports
+- **Side-Effect Tracking** — Model the state changes and side effects of code blocks to predict ripple effects
+- **Equivalence Verification** — Validate that refactored code maintains identical behavior through contract-based testing
+
+Additionally, we pioneered:
+- **Constraint Extraction** — Extracting both explicit and AI-implicit constraints from code
+- **Smell Detection** — Identifying dead code, redundant encapsulation, unreachable conditions
+- **Self-Evolving** — Integration with EvoMap for continuous improvement
+
+## What It Enables
+
+- **Trustworthy AI Code Refactoring** — Refactor AI-generated code with confidence, knowing dependencies and side effects are tracked
+- **Automated Code Quality** — Enforce consistent patterns across AI-generated codebases
+- **Safe Migration** — Safely refactor legacy code with AI assistance while preserving semantics
+- **CI/CD Integration** — Automate refactoring in build pipelines with equivalence guarantees
+
+## Tech Stack
+
+- **Core Engine**: TypeScript (VSCode Extension)
+- **Parser**: Tree-sitter for precise code parsing
+- **Analysis**: AST parsing, dependency analysis
+- **AI Integration**: OpenAI Codex, Gemini (extensible)
+- **Visualization**: D3.js for dependency graphs
+
+## Status
+
+This project is currently under active development, with a working prototype and planned validation on real-world codebases.
+
+## Demo
+
+A minimal prototype demonstrating AI-powered refactoring:
+
+- **Input**: Simple JavaScript/TypeScript function
+- **Output**: Refactored structure with extracted functions
+
+Run:
+
+```bash
+cd demo
+node index.js
 ```
-┌─────────────────────────────────────────────┐
-│           VSCode Extension                  │
-├─────────────────────────────────────────────┤
-│  UI Layer (Webview + D3.js)               │
-├─────────────────────────────────────────────┤
-│  Core Engine                               │
-│  - Parser (Tree-sitter)                   │
-│  - Constraint Extractor                    │
-│  - Smell Detector (ESLint)                 │
-│  - AI Rewriter (Codex)                    │
-│  - Verifier (Diff Test)                   │
-├─────────────────────────────────────────────┤
-│  Integrations                              │
-│  - RefakTS (精确重构)                     │
-│  - EvoMap (Self-Evolving)                 │
-└─────────────────────────────────────────────┘
-```
 
-## 开发计划 (3天)
+The demo includes:
+- `index.js` - Main demo entry point
+- `example-input.js` - Sample input code
+- `example-output.js` - Expected output after refactoring
 
-### Day 1: 基础设施
-- [ ] 项目初始化
-- [ ] VSCode 插件骨架
-- [ ] Parser 集成 (Tree-sitter)
-- [ ] 基础命令注册
+## Roadmap
 
-### Day 2: 核心功能
-- [ ] 依赖图生成
-- [ ] Smell 检测
-- [ ] AI 重写集成
+### Phase 1: Prototype (Current)
+- [x] VSCode extension scaffolding
+- [x] AST parsing foundation
+- [x] Simple dependency extraction
+- [x] Minimal demo with AI refactoring
 
-### Day 3: 验证 + 发布
-- [ ] 功能等价验证
-- [ ] 可视化
-- [ ] 发布
+### Phase 2: Dependency & Analysis
+- [ ] Advanced dependency graph construction
+- [ ] Side-effect modeling for common patterns
+- [ ] Smell detection (dead code, redundant encapsulation)
+- [ ] Constraint extraction (explicit + implicit)
 
-## License
-
-MIT
+### Phase 3: Production-Grade Refactoring Engine
+- [ ] Equivalence verification framework
+- [ ] Multi-language support (Python, Go, Rust)
+- [ ] Self-evolving with EvoMap integration
+- [ ] CI/CD integration and APIs
 
 ---
 
-## 本地开发
-
-```bash
-# 安装依赖
-npm install
-
-# 编译
-npm run compile
-
-# 开发模式
-npm run watch
-```
-
-## 推送指南
-
-由于环境中没有 gh CLI，需要手动推送：
-
-```bash
-# 1. 在 GitHub 创建仓库
-# 2. 添加 remote
-git remote add origin https://github.com/YOUR_USERNAME/CodeRefactorAI.git
-
-# 3. 推送
-git push -u origin master
-```
-
-## 当前进度
-
-- ✅ Day 1: 基础设施 + 核心模块
-- ⏳ Day 2: 核心功能 (Smell检测, AI重写)
-- ⏳ Day 3: 验证 + 发布
+**License**: MIT  
+**Author**: tinyblckc0000al  
+**Repository**: https://github.com/tinyblckc0000al/CodeRefactorAI
